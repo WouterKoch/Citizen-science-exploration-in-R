@@ -1,5 +1,5 @@
 read_gbif <- function(path) {
-  result <- read.table(path, sep="\t", header=TRUE, quote = "", fill=TRUE)
+  result <- read.table(path, sep="\t", header=TRUE, fill=TRUE)
   result
 }
 

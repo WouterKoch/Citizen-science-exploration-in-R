@@ -31,7 +31,7 @@ address <- "Trondheim, Norway"
 ```
 
 ```{r read_ao_data, include=FALSE, echo=FALSE}
-ao_data <- read_gbif(path="data/GBIF_Artsobs_all_2016.csv")
+ao_data <- read_gbif(path="data/Laridae-NO-2016.csv")
 ```
 
 
@@ -68,10 +68,9 @@ world_map <- map_data("world", "Norway")
 ggplot(ao_data_subset) + annotation_map(world_map, fill="gray50", colour="gray50") +
     geom_point(aes(x=decimallongitude, y=decimallatitude, color=species), alpha=0.3, size = .3) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    coord_map(
-      projection = "mercator",
-      xlim=long_dataset,  # limits on longitude
-      ylim=lat_dataset) + # limits on latitude
+    coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
+              xlim=long_dataset,  # limits on longitude
+              ylim=lat_dataset) + # limits on latitude
     xlab("Longitude") +
     ylab("Latitude")
 
@@ -94,7 +93,7 @@ world_map <- map_data("world", "Norway")
 
 ggplot(ao_data_subset) + 
     annotation_map(world_map, fill="gray50", colour="gray50") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=species), alpha=0.3, size = gridsizeinkm * .04) +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=species), alpha=0.3, size = gridsizeinkm * .02) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
               xlim=long_dataset,  # limits on longitude
@@ -166,7 +165,7 @@ geostat_data <- utm_add_rasterized(geostat_data, km=gridsizeinkm)
 ```{r human_pop_plot_rasterized, messages=FALSE, echo=FALSE}
 ggplot(geostat_data) + 
     annotation_map(world_map, fill="gray") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(pop)), size = gridsizeinkm * .04) +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(pop)), size = gridsizeinkm * .02) +
      scale_color_distiller(palette = "Spectral") +
     annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
@@ -197,7 +196,7 @@ num_vs_pop$percapita <- num_vs_pop$num / num_vs_pop$pop
 
 ggplot(num_vs_pop) + 
     annotation_map(world_map, fill="gray") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(percapita)), size = gridsizeinkm * .04) +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(percapita)), size = gridsizeinkm * .02) +
      scale_color_distiller(palette = "Spectral") +
     annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
