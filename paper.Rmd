@@ -38,8 +38,8 @@ geostat_data <- rasterize(geostat_data)       # round all population data positi
 long_dataset <- c(min(ao_data_subset$decimallongitude) %/% 1 , max(ao_data_subset$decimallongitude) %/% 1 + 1)
 lat_dataset <- c(min(ao_data_subset$decimallatitude) %/% 1 , max(ao_data_subset$decimallatitude) %/% 1 + 1)
 
-gridsizeinkm <- 50
-cellsize <- (lat_dataset[2] - lat_dataset[1]) * gridsizeinkm * .0016
+gridsizeinkm <- 30
+cellsize <- (lat_dataset[2] - lat_dataset[1]) * gridsizeinkm * .0018
 
 
 ```
@@ -169,7 +169,7 @@ The log human population per `r gridsizeinkm` x `r gridsizeinkm` km cs cell in N
     geom_smooth(method=lm)
 ```
 
-The number of `r summarize_list(obs_filter[-1])` in Norway per `r gridsizeinkm` x `r gridsizeinkm` km cs cells, versus the human population in those cells. R² of the linaer regression is `r summary(lm(num ~ TOT_P, data=num_vs_pop))$r.squared`. R² of the log linaer regression is `r summary(lm(log10(num) ~ log10(TOT_P), data=num_vs_pop))$r.squared`.
+The number of `r summarize_list(obs_filter[-1])` in Norway per `r gridsizeinkm` x `r gridsizeinkm` km cs cells, versus the human population in those cells. R² of the linaer regression is `r summary(lm(num ~ TOT_P, data=num_vs_pop))$r.squared`.
 
 
 ```{r per_capita_plot_rasterized, messages=FALSE, echo=FALSE}
@@ -187,12 +187,33 @@ ggplot(num_vs_pop) +
               ylim=lat_dataset) + # limits on latitude
    xlab("Longitude") + ylab("Latitude")
 
-
-
-
 ```
 
 The log number of `r summarize_list(obs_filter[-1])` observations in Norway per capita within `r gridsizeinkm` x `r gridsizeinkm` km cells.
+
+
+```{r relative_to_lm_plot_rasterized, messages=FALSE, echo=FALSE}
+
+B0 <- (summary(lm(num ~ TOT_P, data=num_vs_pop))$coefficients)["(Intercept)","Estimate"]
+B1 <- (summary(lm(num ~ TOT_P, data=num_vs_pop))$coefficients)["TOT_P","Estimate"]
+
+num_vs_pop$relativeToLM <- num_vs_pop$num / (B0 + B1 * num_vs_pop$TOT_P) 
+
+ggplot(num_vs_pop) + 
+    annotation_map(world_map, fill="gray50", colour="gray50") +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(relativeToLM)), shape=15, size=cellsize) +
+    scale_color_distiller(palette = "Spectral") +
+    annotation_map(world_map, fill=NA, colour="gray30") +
+    theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
+    coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
+              xlim=long_dataset,  # limits on longitude
+              ylim=lat_dataset) + # limits on latitude
+   xlab("Longitude") + ylab("Latitude")
+
+```
+
+The log number of `r summarize_list(obs_filter[-1])` observations in Norway divided by the number predicted by the regression line (numberOfObservations = `r B0` + `r B1` * humanPopulation),  within `r gridsizeinkm` x `r gridsizeinkm` km cells.
+
 
 
 
