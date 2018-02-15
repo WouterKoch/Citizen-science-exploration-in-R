@@ -1,4 +1,7 @@
 ---
+title: "Norwegian citizen science data exploration"
+author: "Wouter Koch, NBIC"
+
 output:
   pdf_document: default
   word_document: default
@@ -14,59 +17,39 @@ library(rgdal)
 library(ggalt)
 library(dplyr)
 
-long_norway <- c(0, 32)
-lat_norway <- c(57, 72)
-
-```
-
-```{r exploration, include=FALSE, echo=FALSE}
 source("exploration.R")
+
+obs_filter <- c("genus", "Larus")
 ```
 
-```{r author_info, include=FALSE, echo=FALSE}
-first_name <- "Wouter"
-last_name <- "Koch"
-institution <- "Norwegian Biodiversity Information Centre"
-address <- "Trondheim, Norway"
-```
+******
 
-```{r read_ao_data, include=FALSE, echo=FALSE}
+```{r read_data, include=FALSE, echo=FALSE}
 ao_data <- read_gbif(path="data/Laridae-NO-2016.csv")
+geostat_data <- read_geostat(path="data/GeoStat_NO.csv")
 ```
-
-
-# Norwegian citizen science data exploration
-
-By `r last_name`, `r first_name`
-
-> `r institution`, `r address`
-
----------------------------------------------
-
-
 
 ```{r filter_data, include=FALSE, echo=FALSE}
-genera <- c("Larus")
-ao_data_subset <- filter_by_genus(data=ao_data, genera=genera)
+ao_data_subset <- filter_observations(ao_data, obs_filter)  # filter observations
+
+ao_data_subset <- rasterize(ao_data_subset)   # round all observation positions to km
+geostat_data <- rasterize(geostat_data)       # round all population data positions to km
 
 long_dataset <- c(min(ao_data_subset$decimallongitude) %/% 1 , max(ao_data_subset$decimallongitude) %/% 1 + 1)
 lat_dataset <- c(min(ao_data_subset$decimallatitude) %/% 1 , max(ao_data_subset$decimallatitude) %/% 1 + 1)
-# long_dataset <- long_norway
-# lat_dataset <- lat_norway
-
 ```
 
 
 A test data exploration of some [Norwegian Species Observation Service](https://www.artsobservasjoner.no) data, obtained through [GBIF](https://www.gbif.org) (N = `r nrow(ao_data)`). 
 
-Filtering on `r summarize_list(genera)` leaves `r nrow(ao_data_subset)` observations, plotted on the map below.
+Filtering on `r summarize_list(obs_filter[-1])` leaves `r nrow(ao_data_subset)` observations, plotted on the map below.
 
 
 ```{r map, echo=FALSE, message=FALSE}
 world_map <- map_data("world", "Norway")
 
 ggplot(ao_data_subset) + annotation_map(world_map, fill="gray50", colour="gray50") +
-    geom_point(aes(x=decimallongitude, y=decimallatitude, color=species), alpha=0.3, size = .3) +
+    geom_point(aes(x=decimallongitude, y=decimallatitude, color=species), alpha=0.5, size=cellsize/gridsizeinkm, shape=15) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
               xlim=long_dataset,  # limits on longitude
@@ -76,15 +59,13 @@ ggplot(ao_data_subset) + annotation_map(world_map, fill="gray50", colour="gray50
 
 ```
 
-Map for `r summarize_list(genera)` in Norway
-
+Map for `r summarize_list(obs_filter[-1])` in Norway
 
 
 ```{r rasterize, message=FALSE, echo=FALSE}
-
   gridsizeinkm <- 50
-
-  ao_data_subset <- add_rounded_coordinates(dataset=ao_data_subset, km=gridsizeinkm)
+  cellsize <- (lat_dataset[2] - lat_dataset[1]) * gridsizeinkm * .0016
+  ao_data_subset <- rasterize(ao_data_subset, gridsizeinkm)
 ```
 
 
@@ -93,7 +74,7 @@ world_map <- map_data("world", "Norway")
 
 ggplot(ao_data_subset) + 
     annotation_map(world_map, fill="gray50", colour="gray50") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=species), alpha=0.3, size = gridsizeinkm * .02) +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=species), alpha=0.3, size = .5 * cellsize) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
               xlim=long_dataset,  # limits on longitude
@@ -102,30 +83,27 @@ ggplot(ao_data_subset) +
 
 ```
 
-Map for `r summarize_list(genera)` in Norway, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km  cells.
+Map for `r summarize_list(obs_filter[-1])` in Norway, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km  cells.
 
-
-```{r densitymap, message=FALSE, echo=FALSE}
+```{r densitymap_2, message=FALSE, echo=FALSE}
 
 counts <- ddply(ao_data_subset, .(ao_data_subset$long_rounded, ao_data_subset$lat_rounded), nrow)
 names(counts) <- c("long_rounded", "lat_rounded", "freq")
 
-world_map <- map_data("world", "Norway")
-
-ggplot(ao_data_subset, aes(decimallongitude, decimallatitude)) + 
-    annotation_map(world_map, fill="white", color=NA) +
-    geom_bin2d(aes(fill = log10(..count..)), binwidth = c(.018 * gridsizeinkm ,  .01  * gridsizeinkm)) +
-    scale_fill_gradient(low = "gray90", high = "red") +
-    annotation_map(world_map, fill=NA, color="black") +
+ggplot(counts) + 
+    annotation_map(world_map, fill="gray50", colour="gray50") +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(freq)), shape=15, size=cellsize) +
+    scale_color_distiller(palette = "Spectral") +
+    annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
-      xlim=long_dataset,  # limits on longitude
-      ylim=lat_dataset) + # limits on latitude
+              xlim=long_dataset,  # limits on longitude
+              ylim=lat_dataset) + # limits on latitude
    xlab("Longitude") + ylab("Latitude")
-
 ```
 
-Map for `r summarize_list(genera)` in Norway, raterized to `r .018 * gridsizeinkm` x `r .01  * gridsizeinkm` degree cells.
+Map for `r summarize_list(obs_filter[-1])` in Norway, raterized to `r .018 * gridsizeinkm` x `r .01  * gridsizeinkm` degree cells.
+
 
 
 
@@ -137,13 +115,9 @@ Map for `r summarize_list(genera)` in Norway, raterized to `r .018 * gridsizeink
 
 
 ```{r human_pop_data, messages=FALSE, echo=FALSE}
-geostat_data <- read_geostat(path="data/GeoStat_NO.csv")
-geostat_data <- geostat_add_utm(geostat_data)
-
-
 ggplot(geostat_data) + 
     annotation_map(world_map, fill="gray") +
-    geom_point(aes(x=long, y=lat, color=log(X.TOT_P.)), size = .0004, shape=15) +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(TOT_P)), size=cellsize/gridsizeinkm, shape=15) +
     scale_color_distiller(palette = "Spectral") +
     annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
@@ -158,15 +132,18 @@ Log human population per square km in norway
 
 
 ```{r human_pop_rasterize, messages=FALSE, echo=FALSE}
-geostat_data <- utm_add_rasterized(geostat_data, km=gridsizeinkm)
+geostat_data_rastered <- rasterize(geostat_data, gridsizeinkm)
 ```
 
 
 ```{r human_pop_plot_rasterized, messages=FALSE, echo=FALSE}
-ggplot(geostat_data) + 
-    annotation_map(world_map, fill="gray") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(pop)), size = gridsizeinkm * .02) +
-     scale_color_distiller(palette = "Spectral") +
+
+geostat_data_rastered <- geostat_data_rastered %>% group_by(utm_x_rounded, utm_y_rounded, lat_rounded, long_rounded) %>% summarise(TOT_P=sum(TOT_P))
+
+ggplot(geostat_data_rastered) + 
+    annotation_map(world_map, fill="gray50", colour="gray50") +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(TOT_P)), shape=15, size=cellsize) +
+    scale_color_distiller(palette = "Spectral") +
     annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
@@ -180,24 +157,24 @@ The log human population per `r gridsizeinkm` x `r gridsizeinkm` km cs cell in N
 
 
 ```{r per_capita_scatterplot, messages=FALSE, echo=FALSE}
-  num_vs_pop <- join_by_utm_rounded(ao_data_subset, geostat_data)
+  num_vs_pop <- join_by_utm_rounded(ao_data_subset, geostat_data_rastered)
 
-  ggplot(num_vs_pop, aes(x=pop, y=num)) + 
+  ggplot(num_vs_pop, aes(x=TOT_P, y=num)) + 
     geom_point()+
     geom_smooth(method=lm)
 ```
 
-The number of `r summarize_list(genera)` in Norway per `r gridsizeinkm` x `r gridsizeinkm` km cs cells, versus the human population in those cells. R² of the linaer regression is `r summary(lm(num ~ pop, data=num_vs_pop))$r.squared`. R² of the log linaer regression is `r summary(lm(log10(num) ~ log10(pop), data=num_vs_pop))$r.squared`.
+The number of `r summarize_list(obs_filter[-1])` in Norway per `r gridsizeinkm` x `r gridsizeinkm` km cs cells, versus the human population in those cells. R² of the linaer regression is `r summary(lm(num ~ TOT_P, data=num_vs_pop))$r.squared`. R² of the log linaer regression is `r summary(lm(log10(num) ~ log10(TOT_P), data=num_vs_pop))$r.squared`.
 
 
 ```{r per_capita_plot_rasterized, messages=FALSE, echo=FALSE}
 
-num_vs_pop$percapita <- num_vs_pop$num / num_vs_pop$pop
+num_vs_pop$percapita <- num_vs_pop$num / num_vs_pop$TOT_P
 
 ggplot(num_vs_pop) + 
-    annotation_map(world_map, fill="gray") +
-    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(percapita)), size = gridsizeinkm * .02) +
-     scale_color_distiller(palette = "Spectral") +
+    annotation_map(world_map, fill="gray50", colour="gray50") +
+    geom_point(aes(x=long_rounded, y=lat_rounded, color=log(percapita)), shape=15, size=cellsize) +
+    scale_color_distiller(palette = "Spectral") +
     annotation_map(world_map, fill=NA, colour="gray30") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
@@ -205,9 +182,12 @@ ggplot(num_vs_pop) +
               ylim=lat_dataset) + # limits on latitude
    xlab("Longitude") + ylab("Latitude")
 
+
+
+
 ```
 
-The log number of `r summarize_list(genera)` observations in Norway per capita within `r gridsizeinkm` x `r gridsizeinkm` km cells.
+The log number of `r summarize_list(obs_filter[-1])` observations in Norway per capita within `r gridsizeinkm` x `r gridsizeinkm` km cells.
 
 
 
