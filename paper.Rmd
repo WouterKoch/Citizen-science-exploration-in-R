@@ -37,6 +37,11 @@ geostat_data <- rasterize(geostat_data)       # round all population data positi
 
 long_dataset <- c(min(ao_data_subset$decimallongitude) %/% 1 , max(ao_data_subset$decimallongitude) %/% 1 + 1)
 lat_dataset <- c(min(ao_data_subset$decimallatitude) %/% 1 , max(ao_data_subset$decimallatitude) %/% 1 + 1)
+
+gridsizeinkm <- 50
+cellsize <- (lat_dataset[2] - lat_dataset[1]) * gridsizeinkm * .0016
+
+
 ```
 
 
@@ -51,6 +56,7 @@ world_map <- map_data("world", "Norway")
 ggplot(ao_data_subset) + annotation_map(world_map, fill="gray50", colour="gray50") +
     geom_point(aes(x=decimallongitude, y=decimallatitude, color=species), alpha=0.5, size=cellsize/gridsizeinkm, shape=15) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
+    guides(color = guide_legend(override.aes = list(size=4))) +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
               xlim=long_dataset,  # limits on longitude
               ylim=lat_dataset) + # limits on latitude
@@ -63,8 +69,6 @@ Map for `r summarize_list(obs_filter[-1])` in Norway
 
 
 ```{r rasterize, message=FALSE, echo=FALSE}
-  gridsizeinkm <- 50
-  cellsize <- (lat_dataset[2] - lat_dataset[1]) * gridsizeinkm * .0016
   ao_data_subset <- rasterize(ao_data_subset, gridsizeinkm)
 ```
 
@@ -76,6 +80,7 @@ ggplot(ao_data_subset) +
     annotation_map(world_map, fill="gray50", colour="gray50") +
     geom_point(aes(x=long_rounded, y=lat_rounded, color=species), alpha=0.3, size = .5 * cellsize) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
+    guides(color = guide_legend(override.aes = list(size=4))) +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5),
               xlim=long_dataset,  # limits on longitude
               ylim=lat_dataset) + # limits on latitude
