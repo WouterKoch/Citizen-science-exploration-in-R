@@ -55,7 +55,7 @@ ao_data <- load_GBIF_data(download_key)
 ```
 
 
-```{r grid, include=FALSE, echo=FALSE}}
+```{r grid, include=FALSE, echo=FALSE}
 gridsizeinkm <- 50
 
 grid <- get_grid(gridsizeinkm, coordinates_norway)
