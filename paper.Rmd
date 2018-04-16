@@ -24,10 +24,10 @@ output:
   country_map <- map_data("world", country_code)
   
   ## Season onsets for Værnes airport according to Norwegian Meteorological Institute
-  spring <- as.Date("3-15",  format = "%m-%d") ## From Mar 15 
-  summer <- as.Date("5-22",  format = "%m-%d")  ## From May 22
-  fall <- as.Date("9-11",  format = "%m-%d")  ## From Sep 11
-  winter <- as.Date("11-18",  format = "%m-%d")  ## From Nov 18
+  spring <- as.Date("2012-03-15",  format = "%Y-%m-%d") ## From Mar 15 
+  summer <- as.Date("2012-05-22",  format = "%Y-%m-%d")  ## From May 22
+  fall <- as.Date("2012-09-11",  format = "%Y-%m-%d")  ## From Sep 11
+  winter <- as.Date("2012-11-18",  format = "%Y-%m-%d")  ## From Nov 18
   
   sp::coordinates(country_map) <- ~long + lat
   sp::proj4string(country_map) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
@@ -62,24 +62,48 @@ output:
 ```
 
 
-A test data exploration of some [Norwegian Species Observation Service](https://www.artsobservasjoner.no) data, obtained through [GBIF](https://www.gbif.org) (N = `r nrow(ao_data)`). 
+A test data exploration of some [Norwegian Species Observation Service](https://www.artsobservasjoner.no) data: observations within the `r tolower(taxon['rank'])` `r taxon['canonicalName']`, obtained through [GBIF](https://www.gbif.org) (N = `r nrow(ao_data)`).
 
-Filtering on `r taxon['canonicalName']` observations, plotted below.
 
+## Observations
 
 ```{r map_per_species, echo=FALSE, message=FALSE}
-  ggplot(as.data.frame(ao_data)) +
-    annotation_map(as.data.frame(country_map), fill="gray70", colour="gray70") +
-    geom_point(aes(x=decimalLongitude, y=decimalLatitude, color=species), size=.5, shape=20) +
+  ggplot(subset(as.data.frame(ao_data),specificEpithet!="")) +
+    annotation_map(as.data.frame(country_map), fill="white", colour="white") +
+    geom_point(aes(x=decimalLongitude, y=decimalLatitude), color="darkgreen", alpha=.05, size=.25, shape=20) +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "none") +
     coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
     ylab("Latitude") +
-    facet_wrap(~ species)
+    facet_wrap(~ species) + 
+    ggtitle("Observations per species")
 
 ```
 
-Map for each `r taxon['canonicalName']` species in Norway
+Map of observations of each species within the `r tolower(taxon['rank'])` `r taxon['canonicalName']` in Norway.
+
+
+```{r map_per_season, echo=FALSE, message=FALSE}
+  ggplot(as.data.frame(ao_data)) +
+    annotation_map(as.data.frame(country_map), fill="white", colour="white") +
+    geom_point(aes(x=decimalLongitude, y=decimalLatitude), color="darkgreen", alpha=.05, size=.25, shape=20) +
+    theme(panel.background = element_rect(fill="aliceblue"), legend.position = "none") +
+    coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
+    xlab("Longitude") +
+    ylab("Latitude") +
+    facet_wrap(~ season) + 
+    ggtitle("Observations per season")
+
+```
+
+Map of all observations within the `r tolower(taxon['rank'])` `r taxon['canonicalName']` in Norway, per season.
+
+
+
+
+
+
+
 
 
 ```{r rastermap_observations, message=FALSE, echo=FALSE}
@@ -90,45 +114,133 @@ Map for each `r taxon['canonicalName']` species in Norway
   
   gplot(ao_data_rasterized) +
     coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+    annotation_map(as.data.frame(country_map), fill="grey50", colour="black") +
     geom_tile(aes(fill=log(value)), alpha=1) +
     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    scale_fill_distiller(palette = "Spectral", na.value=NA) +
+    # scale_fill_continuous(high = "red", low = "white", na.value=NA) +
+    scale_fill_distiller(palette = "Spectral", na.value=NA, direction = -1) +
     guides(color = guide_legend(override.aes = list(size=4))) +
     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
-    ylab("Latitude") + 
-    labs(title="Total observation density") +
-    labs(subtitle=taxon['canonicalName']) +
-    labs(caption = paste("Density map for all", taxon['canonicalName'], "observations in Norway, rasterized to", gridsizeinkm, "x", gridsizeinkm, "km cells."))
+    ylab("Latitude") +
+    labs(fill = "Observations (log)") + 
+    ggtitle("Observation density")
 
 ```
 
 
-## Human population density
+Density map for all observations in Norway within the `r tolower(taxon['rank'])` `r taxon['canonicalName']`, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km cells.
+
+
+
+
+```{r rastermap_observations_seasonal, message=FALSE, echo=FALSE}
+
+  # ao_data_rasterized_winter <- raster::rasterize(spTransform(subset(ao_data, season=='Winter'), CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count', field='season')
+  # ao_data_rasterized_spring <- raster::rasterize(spTransform(subset(ao_data, season=='Spring'), CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count', field='season')
+  # ao_data_rasterized_summer <- raster::rasterize(spTransform(subset(ao_data, season=='Summer'), CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count', field='season')
+  # ao_data_rasterized_fall <- raster::rasterize(spTransform(subset(ao_data, season=='Fall'), CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count', field='season')
+
+  # ao_season_stack <- stack(ao_data_rasterized_winter, ao_data_rasterized_spring, ao_data_rasterized_summer, ao_data_rasterized_fall)
+  # ao_season_stack <- log(ao_season_stack)
+  # names(ao_season_stack) <- c('Winter','Spring','Summer','Fall')
+  # 
+  # levelplot(ao_season_stack,
+  #     col.regions=colorRampPalette(rev(brewer.pal(5,"Spectral"))),
+  #     scales=list(draw=FALSE ))
+  
+```
+
+
+
+```{r rastermap_observations_seasonal_exp, message=FALSE, echo=FALSE}
+#   
+# 
+#   
+#   
+  # ao_data_rasterized_winter <- ratify(ao_data_rasterized_winter)
+  # rat <- levels(ao_data_rasterized_winter)[[1]]
+  # rat$season <- "Winter"
+  # levels(ao_data_rasterized_winter) <- rat
+  # 
+  # ao_data_rasterized_spring <- ratify(ao_data_rasterized_spring)
+  # rat <- levels(ao_data_rasterized_spring)[[1]]
+  # rat$season <- "Spring"
+  # levels(ao_data_rasterized_spring) <- rat
+  # 
+  # ao_data_rasterized_summer <- ratify(ao_data_rasterized_summer)
+  # rat <- levels(ao_data_rasterized_summer)[[1]]
+  # rat$season <- "Summer"
+  # levels(ao_data_rasterized_summer) <- rat
+  # 
+  # ao_data_rasterized_fall <- ratify(ao_data_rasterized_fall)
+  # rat <- levels(ao_data_rasterized_fall)[[1]]
+  # rat$season <- "Fall"
+  # levels(ao_data_rasterized_fall) <- rat
+  # 
+  # 
+  # ao_season_stack <- stack(ao_data_rasterized_winter, ao_data_rasterized_spring, ao_data_rasterized_summer, ao_data_rasterized_fall)
+  
+  
+#   
+#   
+#   
+   # View(as.data.frame(ao_data_rasterized_winter))
+#   
+# 
+  # gplot(ao_data_rasterized_winter) +
+  #   geom_tile(aes(fill = log(value))) +
+  #   facet_wrap(~ name) +
+  #   scale_fill_gradient(low = 'white', high = 'blue') +
+  #   coord_equal()
+# 
+# 
+#   ao_data_rasterized_hm<- raster::rasterize(spTransform(ao_data, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count', field='season', na.rm=TRUE)
+#     
+#     
+#     
+#     
+# 
+  # country_map <- spTransform(country_map, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
+#   
+# gplot(ao_season_stack) +
+#     coord_fixed() +
+#     annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+#     geom_tile(aes(fill=log(value)), alpha=1) +
+#     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
+#     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
+#     scale_fill_distiller(palette = "Spectral", na.value=NA) +
+#     guides(color = guide_legend(override.aes = list(size=4))) +
+#     facet_wrap(~ layer) +
+#     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
+#     xlab("Longitude") +
+#     ylab("Latitude")
+
+```
+
+
+## Human population
+
 ```{r map_human_population, messages=FALSE, echo=FALSE}
   pop_unrasterized <- raster::rasterize(geostat_data, grid_10km, "TOT_P", fun='sum')
 
   gplot(pop_unrasterized) +
     coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+    annotation_map(as.data.frame(country_map), fill="gray50", colour="black") +
     geom_tile(aes(fill=log(value)), alpha=1) +
     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    scale_fill_distiller(palette = "Spectral", na.value=NA) +
+    scale_fill_distiller(palette = "Spectral", na.value=NA, direction=-1) +
     guides(color = guide_legend(override.aes = list(size=4))) +
     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
     ylab("Latitude") +
-    labs(fill = "Log population") +
+    labs(fill = "Inhabitants (log)") +
     ggtitle("Human population density")
 ```
 
-Log human population per square km in norway
-
-
-
+Log human population per 10 x 10 km cell in norway
 
 
 ```{r rastermap_human_population, messages=FALSE, echo=FALSE}
@@ -137,21 +249,21 @@ pop_rasterized <- raster::rasterize(geostat_data, grid, "TOT_P", fun='sum')
 
 gplot(pop_rasterized) +
     coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+    annotation_map(as.data.frame(country_map), fill="gray50", colour="black") +
     geom_tile(aes(fill=log(value)), alpha=1) +
     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    scale_fill_distiller(palette = "Spectral", na.value=NA) +
+    scale_fill_distiller(palette = "Spectral", na.value=NA, direction=-1) +
     guides(color = guide_legend(override.aes = list(size=4))) +
     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
     ylab("Latitude") +
-    labs(fill = "Log population") +
+    labs(fill = "Inhabitants (log)") +
     ggtitle("Human population density")
 
 ```
 
-The log human population per `r gridsizeinkm` x `r gridsizeinkm` km cs cell in Norway.
+The log human population in Norway, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km cells.
 
 
 ```{r scatterplot_per_capita, messages=FALSE, echo=FALSE}
@@ -163,6 +275,11 @@ The log human population per `r gridsizeinkm` x `r gridsizeinkm` km cs cell in N
   
   num_vs_pop <- ao_data_rasterized.points %>% inner_join(pop_rasterized.points, by = c("x", "y"))
   
+  
+  
+  
+  
+  
   # num_vs_pop <- subset(num_vs_pop, population<100000 & observations < 1000) 
 
   sp::coordinates(num_vs_pop) <- ~x + y
@@ -173,7 +290,7 @@ The log human population per `r gridsizeinkm` x `r gridsizeinkm` km cs cell in N
     geom_smooth(method=lm)
 ```
 
-The number of `r taxon['canonicalName']` in Norway per `r gridsizeinkm` x `r gridsizeinkm` km cs cells, versus the human population in those cells. R² of the linaer regression is `r summary(lm(observations ~ population, data=num_vs_pop))$r.squared`.
+The number of observations in Norway within the `r tolower(taxon['rank'])` `r taxon['canonicalName']` per `r gridsizeinkm` x `r gridsizeinkm` km cells, versus the human population in those cells. R² of the linear regression is `r summary(lm(observations ~ population, data=num_vs_pop))$r.squared`.
 
 
 ```{r rastermap_observations_per_capita, messages=FALSE, echo=FALSE}
@@ -183,7 +300,7 @@ num_vs_pop_rasterized <- raster::rasterize(num_vs_pop, grid, "percapita", fun='s
 
 gplot(num_vs_pop_rasterized) +
     coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+    annotation_map(as.data.frame(country_map), fill="gray50", colour="black") +
     geom_tile(aes(fill=log(value)), alpha=1) +
     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
@@ -192,11 +309,11 @@ gplot(num_vs_pop_rasterized) +
     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
     ylab("Latitude") +
-    labs(fill = "Log observations") +
+    labs(fill = "Observations (log)") +
     ggtitle("Observations per capita")
 ```
 
-The log number of `r taxon['canonicalName']` observations in Norway per capita within `r gridsizeinkm` x `r gridsizeinkm` km cells.
+The log number of observations in Norway within the `r tolower(taxon['rank'])` `r taxon['canonicalName']`, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km cells.
 
 
 ```{r rastermap_observations_relative_to_lm, messages=FALSE, echo=FALSE}
@@ -215,7 +332,7 @@ num_vs_pop_rasterized_LM <- raster::rasterize(num_vs_pop, grid, "relativeToLM", 
 
 gplot(num_vs_pop_rasterized_LM) +
     coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="gray40", colour="black") +
+    annotation_map(as.data.frame(country_map), fill="gray50", colour="black") +
     geom_tile(aes(fill=log(value)), alpha=1) +
     annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
@@ -224,8 +341,39 @@ gplot(num_vs_pop_rasterized_LM) +
     # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
     xlab("Longitude") +
     ylab("Latitude") +
-    labs(fill = "Log observations") +
-    ggtitle("Observations relative to regression with human population")
+    labs(fill = "Observations (log)") +
+    ggtitle("Observations corrected for inhabitants")
 ```
 
-The log number of `r taxon['canonicalName']` observations in Norway divided by the number predicted by the regression line (numberOfObservations = `r B0` + `r B1` * humanPopulation),  within `r gridsizeinkm` x `r gridsizeinkm` km cells.
+The log number of observations within the `r tolower(taxon['rank'])` `r taxon['canonicalName']` in Norway, divided by the number predicted by the regression line (numberOfObservations = `r B0` + `r B1` * humanPopulation), rasterized to `r gridsizeinkm` x `r gridsizeinkm` km cells.
+
+## Bioclimatic variables
+
+```{r climate_data, messages=FALSE, echo=FALSE}
+
+env <- getData('worldclim', var='bio', res=5)
+
+env2 <- projectRaster(env[[1]], grid, method="bilinear")
+
+# plot(env, 1, main=NULL, axes=FALSE)
+
+gplot(env2) +
+    coord_fixed() +
+    annotation_map(as.data.frame(country_map), fill="gray50", colour="black") +
+    geom_tile(aes(fill=value/10), alpha=1) +
+    annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
+    theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
+    scale_fill_distiller(palette = "Spectral", na.value=NA, direction=-1) +
+    guides(color = guide_legend(override.aes = list(size=4))) +
+    # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
+    xlab("Longitude") +
+    ylab("Latitude") +
+    labs(fill = "°C") +
+    ggtitle("Annual Mean Temperature")
+
+```
+
+The Annual Mean Temperature in Norway, rasterized to `r gridsizeinkm` x `r gridsizeinkm` km cells.
+
+
+

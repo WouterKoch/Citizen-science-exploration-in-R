@@ -37,8 +37,8 @@ load_GBIF_data <- function(download_filter) {
   file_age = as.numeric((difftime(as.Date(file.info(destfile)$ctime), Sys.Date(), units = "days")))
   
   
-  # If the GBIF data has been deleted, is older than 10 days or the filter has been changed, download new data
-  if(!file.exists(destfile) || file_age > 10 || paste(download_filter, collapse=', ') != paste(readChar(filter_file, file.info(filter_file)$size))) {
+  # If the GBIF data has been deleted, is older than 10 days or the filter has been changed or deleted, download new data
+  if(!file.exists(destfile) || !file.exists(filter_file) || file_age > 10 || paste(download_filter, collapse=', ') != paste(readChar(filter_file, file.info(filter_file)$size))) {
     cat(paste(gbif_filter, collapse=', '), file=filter_file, sep="")
     
     # Get the credentials if needed
@@ -47,12 +47,17 @@ load_GBIF_data <- function(download_filter) {
     }
     
     download_key <- do.call(occ_download, download_filter) %>% occ_download_meta
-    download_GBIF_API(download_key=download_key,destfile_name=destfile,n_try=20,Sys.sleep_duration=30)
+    download_GBIF_API(download_key=download_key,destfile_name=destfile,n_try=40,Sys.sleep_duration=30)
   }
 
-  gbif_data <- read.table(unzip(destfile,files="occurrence.txt"), header=T, sep="\t", quote="", fill=FALSE)[c('gbifID', 'license','year','month','day','decimalLatitude', 'decimalLongitude','coordinateUncertaintyInMeters', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'specificEpithet', 'species', 'taxonRank')]
-  
+  gbif_data <- read.table(unzip(destfile,files="occurrence.txt"), header=T, sep="\t", quote="", fill=FALSE)[c('gbifID', 'recordedBy', 'license','year','month','day','decimalLatitude', 'decimalLongitude','coordinateUncertaintyInMeters', 'kingdom', 'phylum', 'class', 'order', 'family', 'genus', 'specificEpithet', 'species', 'taxonRank')]
+
   gbif_data$season <- date_to_season(paste0(gbif_data$month, "-", gbif_data$day))
+  gbif_data$season <- factor(gbif_data$season, levels=c("Winter", "Spring", "Summer","Fall"), ordered=TRUE)
+  
+  
+  # gbif_data <- gbif_data %>% dplyr::mutate(recordedBy = strsplit(as.character(recordedBy), ",")) %>% tidyr::unnest(recordedBy)
+  
   
   sp::coordinates(gbif_data) <- ~decimalLongitude + decimalLatitude
   sp::proj4string(gbif_data) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
@@ -94,9 +99,15 @@ get_grid <- function(cellsize_km, grid_extent) {
 }
 
 date_to_season <- function(date_string) {
-  d <- as.Date(date_string, format = "%m-%d")
-  
-  ifelse (d >= winter | d < spring, "Winter",
-  ifelse (d >= spring & d < summer, "Spring",
-  ifelse (d >= summer & d < fall, "Summer", "Fall")))
+  d <- as.Date(paste0("2012-",date_string), format = "%Y-%m-%d")
+
+    return(
+    ifelse(d >= winter | d < spring, "Winter",
+      ifelse(d >= spring & d < summer, "Spring",
+        ifelse(d >= summer & d < fall, "Summer",
+          ifelse(d >= fall & d < winter, "Fall", "Invalid")
+        )
+      )
+    )
+  )
 }
