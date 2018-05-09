@@ -23,6 +23,8 @@ output:
   country_coordinates <- c(3500000, 3500000, 5500000, 5500000)
   country_map <- map_data("world", country_code)
   
+ 
+  
   ## Season onsets for Værnes airport according to Norwegian Meteorological Institute
   spring <- as.Date("2012-03-15",  format = "%Y-%m-%d") ## From Mar 15 
   summer <- as.Date("2012-05-22",  format = "%Y-%m-%d")  ## From May 22
@@ -31,16 +33,17 @@ output:
   
   sp::coordinates(country_map) <- ~long + lat
   sp::proj4string(country_map) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
+  country_map <- spTransform(country_map, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
 ```
 
 ******
 
 
 ```{r variables, include=FALSE, echo=FALSE}
-  higherLevel <- "Family"
+  higherLevel <- "Class"
   focalSpecies <- "Haliaeetus albicilla"
   
-  gridsizeinkm <- 50
+  gridsizeinkm <- 20
   grid <- get_grid(gridsizeinkm, country_coordinates)
 
 ```
@@ -74,128 +77,356 @@ output:
   ao_data <- ao_data %>% tidyr::separate_rows(recordedBy, sep = ",")
   ao_data$recordedBy <- as.factor(ao_data$recordedBy)
 
-  per_user <- ao_data %>% group_by(recordedBy, species) %>% tally %>% tidyr::spread(species, n, fill = 0)
-  per_user$observations <- (ao_data %>% group_by(recordedBy) %>% tally)$n
-  
-  per_user$species <- rowSums(per_user[c(-1)] > 0) - 1
-  per_user <- per_user[c("recordedBy",focalSpecies,"observations","species")]
-
-  names(per_user) <- c("recordedBy","observationsOfSpecies","totalObservations","numberOfSpeciesObserved")
-
-```
-
-
-```{r get_observers, include=FALSE, echo=FALSE}
-  # Get all people that have reported this species, and at least x observations and y species
-  per_user <- per_user %>% filter(observationsOfSpecies > 0 & totalObservations > 100 & numberOfSpeciesObserved > 3)
+  # per_user <- ao_data %>% group_by(recordedBy, species) %>% tally %>% tidyr::spread(species, n, fill = 0)
+  # per_user$observations <- (ao_data %>% group_by(recordedBy) %>% tally)$n
+  # 
+  # per_user$species <- rowSums(per_user[c(-1)] > 0) - 1
+  # per_user <- per_user[c("recordedBy",focalSpecies,"observations","species")]
+  # 
+  # names(per_user) <- c("recordedBy","observationsOfSpecies","totalObservations","numberOfSpeciesObserved")
 
 ```
 
 
-```{r get_empty_squares, include=FALSE, echo=FALSE}
-  # For this species: get cells where it has been observed
+```{r ao_data_to_wide, include=FALSE, echo=FALSE}
 
-  focus_species_observations <- ao_data %>% filter(species == focalSpecies)
-  
-  sp::coordinates(focus_species_observations) <- ~decimalLongitude + decimalLatitude
-  sp::proj4string(focus_species_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
-  focus_species_observations <- spTransform(focus_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
-   focus_species_cells <- as.data.frame(focus_species_observations)
-  focus_species_cells$decimalLatitude <- focus_species_cells$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
-  focus_species_cells$decimalLongitude <- focus_species_cells$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
-  
-  focus_species_cells$cell <- paste(focus_species_cells$decimalLatitude, focus_species_cells$decimalLongitude, sep = "_")
-  
-  focus_species_cells <- focus_species_cells[c("cell")]
-  focus_species_cells <- unique(focus_species_cells)
+ao_data_wide <- ao_data[c("decimalLatitude","decimalLongitude","year","month","day","recordedBy","species")]
+
+ao_data_wide <- spread(count(ao_data_wide, decimalLatitude, decimalLongitude, year, month, day, recordedBy, species), species, n, fill = 0)
+
+```
+
+```{r get_sums, message=FALSE, echo=FALSE}
+counted_species <- rowSums(ao_data_wide[,(7:ncol(ao_data_wide))] > 0)
+counted_observations <- rowSums(ao_data_wide[,(7:ncol(ao_data_wide))])
+
+```
+
+```{r plot_species_counts, message=FALSE, echo=FALSE}
+ao_data_wide$species <- counted_species
+species_counts <- table(ao_data_wide$species)
+barplot(species_counts, main="Number of species per pseudoevent", xlab="Number of species")
+```
+
+
+```{r plot_observation_counts, message=FALSE, echo=FALSE}
+ao_data_wide$observations <- counted_observations
+observation_counts <- table(ao_data_wide$observations)
+barplot(observation_counts, main="Number of observations per pseudoevent", xlab="Number of observations")
+```
+
+
+
+
+
+```{r snap_observations_to_raster, include=FALSE, echo=FALSE}
+
+ao_data_snapped_to_grid <- ao_data
+
+sp::coordinates(ao_data_snapped_to_grid) <- ~decimalLongitude + decimalLatitude
+sp::proj4string(ao_data_snapped_to_grid) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
+ao_data_snapped_to_grid <- spTransform(ao_data_snapped_to_grid, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
+ao_data_snapped_to_grid <- as.data.frame(ao_data_snapped_to_grid)
+ao_data_snapped_to_grid$decimalLatitude <- ao_data_snapped_to_grid$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
+ao_data_snapped_to_grid$decimalLongitude <- ao_data_snapped_to_grid$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
+
+```
+
+```{r snap_observations_to_raster, include=FALSE, echo=FALSE}
+
+ao_data_snapped_to_grid_wide <- ao_data_snapped_to_grid[c("decimalLatitude","decimalLongitude","year","month","day","recordedBy","species")]
+
+ao_data_snapped_to_grid_wide <- spread(count(ao_data_snapped_to_grid_wide, decimalLatitude, decimalLongitude, year, month, day, recordedBy, species), species, n, fill = 0)
 
 ```
 
 
-```{r get_absence, include=FALSE, echo=FALSE}
-  # For such cells, find the number of filtered people that have been there
-  # Or the number of species reported there by such filtered people
+```{r get_sums_snapped, message=FALSE, echo=FALSE}
+counted_species_snapped <- rowSums(ao_data_snapped_to_grid_wide[,(7:ncol(ao_data_snapped_to_grid_wide))] > 0)
 
-  other_species_observations <- ao_data %>% filter(species != focalSpecies)
-  other_species_observations$date <- paste(other_species_observations$year, other_species_observations$month, other_species_observations$day, sep = "-")
+counted_observations_snapped <- rowSums(ao_data_snapped_to_grid_wide[,(7:ncol(ao_data_snapped_to_grid_wide))])
 
-  sp::coordinates(other_species_observations) <- ~decimalLongitude + decimalLatitude
-  sp::proj4string(other_species_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0")
-  other_species_observations <- spTransform(other_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
-  
-  other_species_observations <- as.data.frame(other_species_observations)
-  other_species_observations$decimalLatitude <- other_species_observations$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
-  other_species_observations$decimalLongitude <- other_species_observations$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500)
-
-  other_species_observations <- other_species_observations[c("recordedBy","decimalLatitude","decimalLongitude","date")]
-  other_species_observations <- unique(other_species_observations)
-  
-  other_species_observations$cell <- paste(other_species_observations$decimalLatitude, other_species_observations$decimalLongitude, sep = "_")
-
-  other_species_observations <- subset(other_species_observations, recordedBy %in% per_user$recordedBy)
-  other_species_observations <- subset(other_species_observations, !(cell %in% focus_species_cells$cell))
-
-
-  sp::coordinates(other_species_observations) <- ~decimalLongitude + decimalLatitude
-  sp::proj4string(other_species_observations) <- CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")
-
-  other_species_rasterized <- raster::rasterize(spTransform(other_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count')
-  
-
-  country_map <- spTransform(country_map, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
-  
-```  
-  
-  
-  
-  
-  
-  
-```{r plots_presence, message=FALSE, echo=FALSE}
-
-  focus_species_rasterized <- raster::rasterize(spTransform(focus_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count')
-
-  gplot(focus_species_rasterized) +
-    coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="grey50", colour="black") +
-    geom_tile(aes(fill=value), alpha=1) +
-    annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
-    theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    # scale_fill_continuous(high = "red", low = "white", na.value=NA) +
-    guides(color = guide_legend(override.aes = list(size=4))) +
-    # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
-    xlab("Longitude") +
-    ylab("Latitude") +
-    labs(fill = "Observations") + 
-    ggtitle("Presence")
 ```
 
-Observations of _`r focalSpecies`_ in Norway.
 
-
-```{r plots_absence, message=FALSE, echo=FALSE}
-
-  gplot(other_species_rasterized) +
-    coord_fixed() +
-    annotation_map(as.data.frame(country_map), fill="grey50", colour="black") +
-    geom_tile(aes(fill=value), alpha=1) +
-    annotation_map(as.data.frame(country_map), fill=NA, colour="black") +
-    theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") +
-    # scale_fill_continuous(high = "red", low = "white", na.value=NA) +
-    guides(color = guide_legend(override.aes = list(size=4))) +
-    # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) +
-    xlab("Longitude") +
-    ylab("Latitude") +
-    labs(fill = "Absences") + 
-    ggtitle("Absence")
-  
+```{r plot_snapped_species_counts, message=FALSE, echo=FALSE}
+ao_data_snapped_to_grid_wide$species <- counted_species_snapped
+species_counts_snapped <- table(ao_data_snapped_to_grid_wide$species)
+barplot(species_counts_snapped, main="Number of species per pseudoevent, snapped to grid", xlab="Number of species")
 ```
 
-Absence of _`r focalSpecies`_ in Norway.
-(Visits by users known to report _`r focalSpecies`_, where that user reported at least one observation of other species within the same `r tolower(higherLevel)` within that cell.)
+
+```{r plot_snapped_observation_counts, message=FALSE, echo=FALSE}
+ao_data_snapped_to_grid_wide$observations <-counted_observations_snapped
+observation_counts_snapped <- table(ao_data_snapped_to_grid_wide$observations)
+barplot(observation_counts_snapped, main="Number of observations per pseudoevent, snapped to grid", xlab="Number of observations")
+```
 
 
 
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ```{r get_observers, include=FALSE, echo=FALSE} -->
+<!--   # Get all people that have reported this species, and at least x observations and y species -->
+<!--   per_user <- per_user %>% filter(observationsOfSpecies > 0 & totalObservations > 100 & numberOfSpeciesObserved > 3) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r get_presence_observations , include=FALSE, echo=FALSE} -->
+<!--   # Get one observation per observer per day per rastercell of the focal species -->
+<!--   presence_observations <- ao_data %>% filter(species == focalSpecies) -->
+<!--   presence_observations <- subset(presence_observations, recordedBy %in% per_user$recordedBy) -->
+
+<!--   sp::coordinates(presence_observations) <- ~decimalLongitude + decimalLatitude -->
+<!--   sp::proj4string(presence_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0") -->
+<!--   presence_observations <- spTransform(presence_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")) -->
+<!--   presences <- as.data.frame(presence_observations) -->
+<!--   presences$decimalLatitude <- presences$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   presences$decimalLongitude <- presences$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+
+<!--   presences$cell <- paste(presences$decimalLatitude, presences$decimalLongitude, sep = "_") -->
+
+<!--   presences <- presences[c("decimalLatitude","decimalLongitude","year","month","day","recordedBy")] -->
+<!--   presences <- unique(presences) -->
+<!--   presences$summary <- paste( -->
+<!--                                             presences$decimalLatitude, -->
+<!--                                             presences$decimalLongitude, -->
+<!--                                             presences$year, -->
+<!--                                             presences$month, -->
+<!--                                             presences$day, -->
+<!--                                             presences$recordedBy, -->
+<!--                                             sep = "_") -->
+
+<!-- ``` -->
+
+<!-- ```{r get_other_observations , include=FALSE, echo=FALSE} -->
+<!--   # Get one observation per observer per day per rastercell of the non-focal species -->
+<!--   other_observations <- ao_data %>% filter(species != focalSpecies) -->
+<!--   other_observations <- subset(other_observations, recordedBy %in% per_user$recordedBy) -->
+
+<!--   sp::coordinates(other_observations) <- ~decimalLongitude + decimalLatitude -->
+<!--   sp::proj4string(other_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0") -->
+<!--   other_observations <- spTransform(other_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")) -->
+<!--   other_observations_cells <- as.data.frame(other_observations) -->
+<!--   other_observations_cells$decimalLatitude <- other_observations_cells$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   other_observations_cells$decimalLongitude <- other_observations_cells$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+
+<!--   other_observations_cells$cell <- paste(other_observations_cells$decimalLatitude, other_observations_cells$decimalLongitude, sep = "_") -->
+
+<!--   other_observations_cells <- other_observations_cells[c("decimalLatitude","decimalLongitude","year","month","day","recordedBy")] -->
+<!--   other_observations_cells <- unique(other_observations_cells) -->
+<!--   other_observations_cells$summary <- paste( -->
+<!--                                             other_observations_cells$decimalLatitude, -->
+<!--                                             other_observations_cells$decimalLongitude, -->
+<!--                                             other_observations_cells$year, -->
+<!--                                             other_observations_cells$month, -->
+<!--                                             other_observations_cells$day, -->
+<!--                                             other_observations_cells$recordedBy, -->
+<!--                                             sep = "_") -->
+
+
+
+
+<!-- ``` -->
+
+<!-- ```{r get_absences , include=FALSE, echo=FALSE} -->
+<!--   # Get absences -->
+<!--   absences <- subset(other_observations_cells, !(summary %in% presences$summary)) -->
+
+<!--   sp::coordinates(absences) <- ~decimalLongitude + decimalLatitude -->
+<!--   sp::proj4string(absences) <- CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs") -->
+
+<!--   sp::coordinates(presences) <- ~decimalLongitude + decimalLatitude -->
+<!--   sp::proj4string(presences) <- CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs") -->
+
+
+
+
+<!-- ``` -->
+
+
+
+<!-- ```{r plots_absence, message=FALSE, echo=FALSE} -->
+
+<!--   absences_rasterized <- raster::rasterize(spTransform(absences, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count') -->
+
+<!--   gplot(absences_rasterized) + -->
+<!--     coord_fixed() + -->
+<!--     annotation_map(as.data.frame(country_map), fill="white", colour="grey50") + -->
+<!--     geom_tile(aes(fill=log(value)), alpha=1) + -->
+<!--     scale_fill_gradient(low = "yellow", high = "red", na.value = NA) + -->
+<!--     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") + -->
+<!--     guides(color = guide_legend(override.aes = list(size=4))) + -->
+<!-- #    annotation_map(as.data.frame(country_map), fill=NA, colour="black") + -->
+<!--     xlab("Longitude") + -->
+<!--     ylab("Latitude") + -->
+<!--     labs(fill = "Absences") + -->
+<!--     ggtitle("Absence") -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r plots_presence, message=FALSE, echo=FALSE} -->
+<!--   presences_rasterized <- raster::rasterize(spTransform(presences, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count') -->
+
+<!--   gplot(presences_rasterized) + -->
+<!--     coord_fixed() + -->
+<!--     annotation_map(as.data.frame(country_map), fill="white", colour="grey50") + -->
+<!--     geom_tile(aes(fill=log(value)), alpha=1) + -->
+<!--     scale_fill_gradient(low = "yellow", high = "darkblue", na.value = NA) + -->
+<!-- #    annotation_map(as.data.frame(country_map), fill=NA, colour="black") + -->
+<!--     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") + -->
+<!--     guides(color = guide_legend(override.aes = list(size=4))) + -->
+<!--     xlab("Longitude") + -->
+<!--     ylab("Latitude") + -->
+<!--     labs(fill = "Presences") + -->
+<!--     ggtitle("Presence") -->
+
+<!-- ``` -->
+
+
+
+
+
+<!-- ```{r plots_presence, message=FALSE, echo=FALSE} -->
+
+<!--   presence_minus_absence <- overlay(presences_rasterized, absences_rasterized, fun=function(r1, r2){return(r1/r2)}) -->
+
+<!--   gplot(presence_minus_absence) + -->
+<!--     coord_fixed() + -->
+<!--     annotation_map(as.data.frame(country_map), fill="white", colour="grey50") + -->
+<!--     geom_tile(aes(fill=log(value)), alpha=1) + -->
+<!--     scale_fill_gradient2(low = "red", high = "darkblue", mid = "yellow", na.value = NA) + -->
+<!--     theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") + -->
+<!--     guides(color = guide_legend(override.aes = list(size=4))) + -->
+<!--     xlab("Longitude") + -->
+<!--     ylab("Latitude") + -->
+<!--     labs(fill = "log(Presences / absences)") + -->
+<!--     ggtitle("Relative absence") -->
+
+<!-- ``` -->
+
+
+
+
+
+
+
+<!-- ```{r get_empty_squares, include=FALSE, echo=FALSE} -->
+<!--   # For this species: get cells where it has been observed -->
+
+<!--   # focus_species_observations <- ao_data %>% filter(species == focalSpecies) -->
+<!--   #  -->
+<!--   # sp::coordinates(focus_species_observations) <- ~decimalLongitude + decimalLatitude -->
+<!--   # sp::proj4string(focus_species_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0") -->
+<!--   # focus_species_observations <- spTransform(focus_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")) -->
+<!--   #  focus_species_cells <- as.data.frame(focus_species_observations) -->
+<!--   # focus_species_cells$decimalLatitude <- focus_species_cells$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   # focus_species_cells$decimalLongitude <- focus_species_cells$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   #  -->
+<!--   # focus_species_cells$cell <- paste(focus_species_cells$decimalLatitude, focus_species_cells$decimalLongitude, sep = "_") -->
+<!--   #  -->
+<!--   # focus_species_cells <- focus_species_cells[c("cell")] -->
+<!--   # focus_species_cells <- unique(focus_species_cells) -->
+
+<!-- ``` -->
+
+
+<!-- ```{r get_absence, include=FALSE, echo=FALSE} -->
+<!--   # For such cells, find the number of filtered people that have been there -->
+<!--   # Or the number of species reported there by such filtered people -->
+
+<!--   # other_species_observations <- ao_data %>% filter(species != focalSpecies) -->
+<!--   # other_species_observations$date <- paste(other_species_observations$year, other_species_observations$month, other_species_observations$day, sep = "-") -->
+<!--   #  -->
+<!--   # sp::coordinates(other_species_observations) <- ~decimalLongitude + decimalLatitude -->
+<!--   # sp::proj4string(other_species_observations) <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs +towgs84=0,0,0") -->
+<!--   # other_species_observations <- spTransform(other_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")) -->
+<!--   #  -->
+<!--   # other_species_observations <- as.data.frame(other_species_observations) -->
+<!--   # other_species_observations$decimalLatitude <- other_species_observations$decimalLatitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   # other_species_observations$decimalLongitude <- other_species_observations$decimalLongitude %/% (gridsizeinkm * 1000) * (gridsizeinkm * 1000) + (gridsizeinkm * 500) -->
+<!--   #  -->
+<!--   # other_species_observations <- other_species_observations[c("recordedBy","decimalLatitude","decimalLongitude","date")] -->
+<!--   # other_species_observations <- unique(other_species_observations) -->
+<!--   #  -->
+<!--   # other_species_observations$cell <- paste(other_species_observations$decimalLatitude, other_species_observations$decimalLongitude, sep = "_") -->
+<!--   #  -->
+<!--   # other_species_observations <- subset(other_species_observations, recordedBy %in% per_user$recordedBy) -->
+<!--   # other_species_observations <- subset(other_species_observations, !(cell %in% focus_species_cells$cell)) -->
+<!--   #  -->
+<!--   #  -->
+<!--   # sp::coordinates(other_species_observations) <- ~decimalLongitude + decimalLatitude -->
+<!--   # sp::proj4string(other_species_observations) <- CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs") -->
+<!--   #  -->
+<!--   # other_species_rasterized <- raster::rasterize(spTransform(other_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count') -->
+<!--   #  -->
+<!--   #  -->
+<!--   # country_map <- spTransform(country_map, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")) -->
+
+<!-- ```   -->
+
+
+
+
+
+
+<!-- ```{r plots_presence, message=FALSE, echo=FALSE} -->
+
+<!--   # focus_species_rasterized <- raster::rasterize(spTransform(focus_species_observations, CRS("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs")), grid, fun='count') -->
+<!--   #  -->
+<!--   # gplot(focus_species_rasterized) + -->
+<!--   #   coord_fixed() + -->
+<!--   #   annotation_map(as.data.frame(country_map), fill="grey50", colour="black") + -->
+<!--   #   geom_tile(aes(fill=value), alpha=1) + -->
+<!--   #   annotation_map(as.data.frame(country_map), fill=NA, colour="black") + -->
+<!--   #   theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") + -->
+<!--   #   # scale_fill_continuous(high = "red", low = "white", na.value=NA) + -->
+<!--   #   guides(color = guide_legend(override.aes = list(size=4))) + -->
+<!--   #   # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) + -->
+<!--   #   xlab("Longitude") + -->
+<!--   #   ylab("Latitude") + -->
+<!--   #   labs(fill = "Observations") +  -->
+<!--   #   ggtitle("Presence") -->
+<!-- ``` -->
+
+<!-- Observations of _`r focalSpecies`_ in Norway. -->
+
+
+<!-- ```{r plots_absence, message=FALSE, echo=FALSE} -->
+
+<!--   # gplot(other_species_rasterized) + -->
+<!--   #   coord_fixed() + -->
+<!--   #   annotation_map(as.data.frame(country_map), fill="grey50", colour="black") + -->
+<!--   #   geom_tile(aes(fill=value), alpha=1) + -->
+<!--   #   annotation_map(as.data.frame(country_map), fill=NA, colour="black") + -->
+<!--   #   theme(panel.background = element_rect(fill="aliceblue"), legend.position = "right") + -->
+<!--   #   # scale_fill_continuous(high = "red", low = "white", na.value=NA) + -->
+<!--   #   guides(color = guide_legend(override.aes = list(size=4))) + -->
+<!--   #   # coord_map(projection = "gnomonic", orientation=c(60, 16, -5)) + -->
+<!--   #   xlab("Longitude") + -->
+<!--   #   ylab("Latitude") + -->
+<!--   #   labs(fill = "Absences") +  -->
+<!--   #   ggtitle("Absence") -->
+
+<!-- ``` -->
+
+<!-- Absence of _`r focalSpecies`_ in Norway. -->
+<!-- (Visits by users known to report _`r focalSpecies`_, where that user reported at least one observation of other species within the same `r tolower(higherLevel)` within that cell.) -->
